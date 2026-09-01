@@ -5,3 +5,4 @@ __pycache__/
 *.session-journal
 TGSpyder_Output/
 .DS_Store
+.env
