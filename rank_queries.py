@@ -71,3 +71,26 @@ def subscriber_history(conn: sqlite3.Connection, username: str) -> list[dict]:
         (username.lstrip('@'),),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def previous_snapshot_id(conn: sqlite3.Connection, snapshot_id: int) -> int | None:
+    row = conn.execute(
+        'SELECT id FROM snapshots WHERE id < ? ORDER BY id DESC LIMIT 1',
+        (snapshot_id,),
+    ).fetchone()
+    return int(row['id']) if row else None
+
+
+def channel_post_archive(conn: sqlite3.Connection, username: str) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT pv.msg_id AS id, MIN(pv.posted_at) AS posted_at
+        FROM post_views pv
+        JOIN channels c ON c.id = pv.channel_id
+        WHERE c.username = ? COLLATE NOCASE
+        GROUP BY pv.msg_id
+        ORDER BY posted_at
+        """,
+        (username.lstrip('@'),),
+    ).fetchall()
+    return [dict(r) for r in rows]

@@ -33,7 +33,7 @@ from tg_config import Account, accounts
 log = logging.getLogger('collect_rank')
 
 MAX_RETRIES = 3
-POSTS_LOOKBACK_DAYS = 14
+POSTS_LOOKBACK_DAYS = 90
 CHANNEL_DELAY = 0.6
 # Короче этого — ждём на том же app. Длиннее — пробуем второй.
 SWITCH_AFTER_SEC = 20

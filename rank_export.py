@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -24,8 +25,9 @@ from rank_metrics import (
     catalog_rows,
     err7_rows,
     paired_err_growth,
+    parse_ts,
 )
-from rank_queries import channel_posts, snapshot_meta, subscriber_history
+from rank_queries import channel_post_archive, channel_posts, previous_snapshot_id, snapshot_meta, subscriber_history
 from rank_store import DEFAULT_DB, connect, latest_snapshot_id, load_catalog
 
 OUT_DIR = Path('TGSpyder_Output/rank')
@@ -230,6 +232,57 @@ def export(db: Path, out_dir: Path, snapshot_id: int | None) -> Path:
     return xlsx
 
 
+_LOCAL_TZ = ZoneInfo('Europe/Minsk')
+
+
+def _growth(hist: list[dict]) -> dict:
+    points = [
+        (h['collected_at'], h['subscribers'])
+        for h in hist
+        if h.get('subscribers') is not None
+    ]
+    if not points:
+        return {'delta': None, 'delta_pct': None, 'delta_all': None}
+    last = points[-1][1]
+    prev = points[-2][1] if len(points) > 1 else None
+    first = points[0][1]
+    delta = None if prev is None else last - prev
+    delta_pct = None if prev in (None, 0) else round(100 * delta / prev, 1)
+    delta_all = last - first if len(points) > 1 else None
+    return {'delta': delta, 'delta_pct': delta_pct, 'delta_all': delta_all}
+
+
+def _cadence(times: list[datetime], now: datetime) -> dict:
+    def since(days: int) -> int:
+        cut = now - timedelta(days=days)
+        return sum(1 for t in times if t >= cut)
+
+    span = None
+    if times:
+        span = round((now - min(times)).total_seconds() / 86400, 1)
+    return {'d7': since(7), 'd30': since(30), 'd90': since(90), 'span_days': span}
+
+
+def _heatmap(times: list[datetime]) -> list[list[int]]:
+    grid = [[0] * 24 for _ in range(7)]
+    for t in times:
+        local = t.astimezone(_LOCAL_TZ)
+        grid[local.weekday()][local.hour] += 1
+    return grid
+
+
+def _metric_delta(current, previous, key: str):
+    if previous is None:
+        return None
+    cur = current.get(key)
+    prev = previous.get(key)
+    if cur is None or prev is None:
+        return None
+    if key == 'readability':
+        return round((cur - prev) * 100, 1)
+    return round(cur - prev)
+
+
 _FORBIDDEN_TOKENS = (
     'api_hash', 'api_id', 'tg_api', 'session', 'password', 'passwd',
     'rkn', 'gosuslugi', 'knd.gov',
@@ -248,10 +301,24 @@ def public_payload(conn, snapshot_id: int) -> dict:
     rows = catalog_rows(conn, snapshot_id)
     watch = {c['username'].lower() for c in load_catalog()}
     rows = [r for r in rows if r['username'].lower() in watch]
+    prev_id = previous_snapshot_id(conn, snapshot_id)
+    prev_map = {}
+    if prev_id is not None:
+        prev_map = {
+            r['username'].lower(): r
+            for r in catalog_rows(conn, prev_id)
+            if r['username'].lower() in watch
+        }
+    now = parse_ts(meta.get('collected_at')) or datetime.now(timezone.utc)
+    combined_times: list[datetime] = []
     channels = []
     for row in sorted(rows, key=_catalog_sort_key):
         posts = channel_posts(conn, row['username'], snapshot_id)
         hist = subscriber_history(conn, row['username'])
+        archive = channel_post_archive(conn, row['username'])
+        times = [t for t in (parse_ts(p['posted_at']) for p in archive) if t]
+        combined_times.extend(times)
+        prev = prev_map.get(row['username'].lower())
         channels.append({
             'place': row['place'],
             'username': row['username'],
@@ -265,6 +332,11 @@ def public_payload(conn, snapshot_id: int) -> dict:
             'last_post': (row['last_post_at'] or '')[:10] or None,
             'active': bool(row['active']),
             'kind': 'channel' if row['is_broadcast'] else ('chat' if row['is_megagroup'] else None),
+            'growth': _growth(hist),
+            'cadence': _cadence(times, now),
+            'heatmap': _heatmap(times),
+            'delta_reach': _metric_delta(row, prev, 'reach'),
+            'delta_readability': _metric_delta(row, prev, 'readability'),
             'posts': [
                 {
                     'id': p['msg_id'],
@@ -286,6 +358,7 @@ def public_payload(conn, snapshot_id: int) -> dict:
     payload = {
         'collected_at': meta.get('collected_at'),
         'snapshot_id': meta.get('id'),
+        'heatmap': _heatmap(combined_times),
         'channels': channels,
     }
     _assert_public(payload)
