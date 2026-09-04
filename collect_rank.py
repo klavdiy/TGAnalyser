@@ -46,6 +46,10 @@ RKN_URL_RE = re.compile(
     r')',
     re.IGNORECASE,
 )
+LINK_RE = re.compile(r'https?://[^\s)\]\'\"<>]+', re.IGNORECASE)
+BODY_MAX = 4096
+LINKS_MAX = 40
+FULL_HISTORY_START = datetime(2013, 8, 1, tzinfo=timezone.utc)
 
 
 def extract_rkn_url(*texts: str | None) -> str:
@@ -86,6 +90,46 @@ def grade_reactions(msg) -> tuple[int, int, int, int]:
         else:
             neu += n
     return pos + neu + neg, pos, neu, neg
+
+
+def message_body(msg) -> str:
+    return (getattr(msg, 'message', None) or '')[:BODY_MAX]
+
+
+def extract_links(msg, text: str) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def add(url: str) -> None:
+        u = (url or '').strip().rstrip(').,;')
+        if u.startswith('t.me/'):
+            u = 'https://' + u
+        if not u.startswith(('http://', 'https://')):
+            return
+        if u not in seen:
+            seen.add(u)
+            found.append(u)
+
+    for match in LINK_RE.finditer(text or ''):
+        add(match.group(0))
+    for ent in getattr(msg, 'entities', None) or []:
+        url = getattr(ent, 'url', None)
+        if url:
+            add(url)
+    return found[:LINKS_MAX]
+
+
+def forward_from(msg) -> str | None:
+    fwd = getattr(msg, 'forward', None)
+    if fwd is None:
+        return None
+    chat = getattr(fwd, 'chat', None)
+    if chat is not None:
+        return getattr(chat, 'username', None) or getattr(chat, 'title', None)
+    sender = getattr(fwd, 'sender', None)
+    if sender is not None:
+        return getattr(sender, 'username', None)
+    return getattr(fwd, 'sender_name', None)
 
 
 def iso(dt: datetime | None) -> str | None:
@@ -213,6 +257,7 @@ async def collect_channel(pool: AccountPool, username: str, cutoff: datetime) ->
         if not msg.post and msg.views is None and not (msg.text or msg.media):
             continue
         total, pos, neu, neg = grade_reactions(msg)
+        body = message_body(msg)
         posts.append({
             'msg_id': msg.id,
             'posted_at': iso(msg_date),
@@ -222,6 +267,9 @@ async def collect_channel(pool: AccountPool, username: str, cutoff: datetime) ->
             'react_pos': pos,
             'react_neu': neu,
             'react_neg': neg,
+            'body': body,
+            'links': extract_links(msg, body),
+            'fwd_from': forward_from(msg),
         })
 
     stats['posts_sampled'] = len(posts)
@@ -265,15 +313,19 @@ async def run(args: argparse.Namespace) -> None:
 
     pending = [c for c in catalog if c['username'].lower() not in done]
     log.info('К сбору: %s из %s', len(pending), len(catalog))
+    full_history = {u.lower().lstrip('@') for u in args.full_history}
 
     try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
-        log.info('Посты с %s', cutoff.strftime('%Y-%m-%d %H:%M UTC'))
+        default_cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
+        log.info('Посты с %s (кроме --full-history)', default_cutoff.strftime('%Y-%m-%d %H:%M UTC'))
+        if full_history:
+            log.info('Полная история: %s', ', '.join(sorted(full_history)))
 
         for i, item in enumerate(pending, 1):
             username = item['username']
             channel_id = ids[username.lower()]
-            log.info('[%s/%s] @%s  (app %s)', i, len(pending), username, pool.label)
+            cutoff = FULL_HISTORY_START if username.lower() in full_history else default_cutoff
+            log.info('[%s/%s] @%s  (app %s, с %s)', i, len(pending), username, pool.label, cutoff.strftime('%Y-%m-%d'))
             try:
                 stats, posts = await collect_channel(pool, username, cutoff)
             except FloodWaitError as exc:
@@ -300,6 +352,7 @@ async def run(args: argparse.Namespace) -> None:
             await asyncio.sleep(args.delay)
     finally:
         await pool.close()
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
         conn.close()
     log.info('Снимок #%s готов', snapshot_id)
 
@@ -312,6 +365,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--resume', action='store_true', help='Дособрать последний снимок')
     parser.add_argument('--limit', type=int, default=0, help='Ограничить число каналов (отладка)')
     parser.add_argument('--days', type=int, default=POSTS_LOOKBACK_DAYS)
+    parser.add_argument(
+        '--full-history', action='append', default=[], metavar='USERNAME',
+        help='Собрать все посты канала, без окна --days (можно несколько раз)',
+    )
     parser.add_argument('--delay', type=float, default=CHANNEL_DELAY)
     parser.add_argument(
         '--account', choices=('auto', '1', '2'), default='auto',

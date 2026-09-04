@@ -47,6 +47,7 @@ def channel_posts(
         """
         SELECT pv.msg_id, pv.posted_at, pv.views, pv.forwards, pv.reactions,
                pv.react_pos, pv.react_neu, pv.react_neg,
+               pv.body, pv.links, pv.fwd_from,
                c.username
         FROM post_views pv
         JOIN channels c ON c.id = pv.channel_id

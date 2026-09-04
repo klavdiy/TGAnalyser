@@ -296,7 +296,42 @@ def _assert_public(payload: dict) -> None:
             raise SystemExit('public export contains a forbidden field')
 
 
-def public_payload(conn, snapshot_id: int) -> dict:
+def _parse_links(raw) -> list[str]:
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(u) for u in raw if u]
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(value, list):
+        return []
+    return [str(u) for u in value if u]
+
+
+def _post_public(p: dict) -> dict:
+    return {
+        'id': p['msg_id'],
+        'posted_at': p['posted_at'],
+        'views': p['views'],
+        'forwards': p['forwards'],
+        'reactions': p.get('reactions'),
+        'react_pos': p.get('react_pos'),
+        'react_neu': p.get('react_neu'),
+        'react_neg': p.get('react_neg'),
+    }
+
+
+def _post_admin(p: dict) -> dict:
+    item = _post_public(p)
+    item['text'] = p.get('body') or ''
+    item['links'] = _parse_links(p.get('links'))
+    item['fwd'] = p.get('fwd_from') or None
+    return item
+
+
+def _snapshot_payload(conn, snapshot_id: int, *, private: bool) -> dict:
     meta = snapshot_meta(conn, snapshot_id)
     rows = catalog_rows(conn, snapshot_id)
     watch = {c['username'].lower() for c in load_catalog()}
@@ -312,6 +347,7 @@ def public_payload(conn, snapshot_id: int) -> dict:
     now = parse_ts(meta.get('collected_at')) or datetime.now(timezone.utc)
     combined_times: list[datetime] = []
     channels = []
+    post_fn = _post_admin if private else _post_public
     for row in sorted(rows, key=_catalog_sort_key):
         posts = channel_posts(conn, row['username'], snapshot_id)
         hist = subscriber_history(conn, row['username'])
@@ -319,7 +355,7 @@ def public_payload(conn, snapshot_id: int) -> dict:
         times = [t for t in (parse_ts(p['posted_at']) for p in archive) if t]
         combined_times.extend(times)
         prev = prev_map.get(row['username'].lower())
-        channels.append({
+        channel = {
             'place': row['place'],
             'username': row['username'],
             'title': row['title'] or '',
@@ -337,32 +373,38 @@ def public_payload(conn, snapshot_id: int) -> dict:
             'heatmap': _heatmap(times),
             'delta_reach': _metric_delta(row, prev, 'reach'),
             'delta_readability': _metric_delta(row, prev, 'readability'),
-            'posts': [
-                {
-                    'id': p['msg_id'],
-                    'posted_at': p['posted_at'],
-                    'views': p['views'],
-                    'forwards': p['forwards'],
-                    'reactions': p.get('reactions'),
-                    'react_pos': p.get('react_pos'),
-                    'react_neu': p.get('react_neu'),
-                    'react_neg': p.get('react_neg'),
-                }
-                for p in posts
-            ],
+            'posts': [post_fn(p) for p in posts],
             'subscriber_history': [
                 {'at': h['collected_at'], 'subscribers': h['subscribers']}
                 for h in hist
             ],
-        })
-    payload = {
+        }
+        if private:
+            channel['about'] = row.get('about') or ''
+        channels.append(channel)
+    return {
         'collected_at': meta.get('collected_at'),
         'snapshot_id': meta.get('id'),
         'heatmap': _heatmap(combined_times),
         'channels': channels,
     }
+
+
+def public_payload(conn, snapshot_id: int) -> dict:
+    payload = _snapshot_payload(conn, snapshot_id, private=False)
     _assert_public(payload)
     return payload
+
+
+def admin_payload(conn, snapshot_id: int) -> dict:
+    return _snapshot_payload(conn, snapshot_id, private=True)
+
+
+def _write_json(path: Path, payload: dict, label: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    print(f'{label} → {path}')
+    return path
 
 
 def write_public_json(db: Path, path: Path, snapshot_id: int | None) -> Path:
@@ -374,10 +416,19 @@ def write_public_json(db: Path, path: Path, snapshot_id: int | None) -> Path:
         raise SystemExit('В базе нет снимков — сначала python collect_rank.py')
     payload = public_payload(conn, snapshot_id)
     conn.close()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    print(f'JSON      → {path}')
-    return path
+    return _write_json(path, payload, 'JSON     ')
+
+
+def write_admin_json(db: Path, path: Path, snapshot_id: int | None) -> Path:
+    conn = connect(db)
+    if snapshot_id is None:
+        snapshot_id = latest_snapshot_id(conn)
+    if snapshot_id is None:
+        conn.close()
+        raise SystemExit('В базе нет снимков — сначала python collect_rank.py')
+    payload = admin_payload(conn, snapshot_id)
+    conn.close()
+    return _write_json(path, payload, 'Admin JSON')
 
 
 def parse_args() -> argparse.Namespace:
@@ -386,14 +437,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--out', default=str(OUT_DIR))
     parser.add_argument('--snapshot', type=int, default=0, help='id снимка, 0 = последний')
     parser.add_argument('--json', default='', help='путь к публичному JSON (без Excel)')
+    parser.add_argument(
+        '--json-admin', default='',
+        help='закрытый JSON (тексты, ссылки, about) — не класть в публичный репозиторий',
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     snapshot_id = args.snapshot or None
+    wrote = False
     if args.json:
         write_public_json(Path(args.db), Path(args.json), snapshot_id)
+        wrote = True
+    if args.json_admin:
+        write_admin_json(Path(args.db), Path(args.json_admin), snapshot_id)
+        wrote = True
+    if wrote:
         return
     export(Path(args.db), Path(args.out), snapshot_id)
 

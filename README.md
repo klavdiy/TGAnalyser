@@ -8,10 +8,11 @@
 
 ## Что получается на выходе
 
-1. **SQLite-снимок** `data/rank.sqlite` — подписчики, посты за 14 дней, просмотры, пересылки, реакции.
+1. **SQLite-снимок** `data/rank.sqlite` — подписчики, посты за 90 дней, просмотры, пересылки, реакции, тексты.
 2. **Excel и Markdown** в `TGSpyder_Output/rank/` — таблица рейтинга.
-3. **Публичный JSON** — только метрики каналов, без ключей и сессий: `python rank_export.py --json latest.json`
-4. **Локальный GUI** — `streamlit run app.py`
+3. **Публичный JSON** — только метрики, без текстов и about: `python rank_export.py --json latest.json`
+4. **Закрытый JSON** — тексты, ссылки, пересылки, about: `python rank_export.py --json-admin private.json` (не коммитить в открытый репозиторий)
+5. **Локальный GUI** — `streamlit run app.py`
 
 Сессии Telegram, `.env` и sqlite в git не входят.
 
@@ -121,6 +122,7 @@ GUI: http://localhost:8501
 | `--account auto` | Все заполненные приложения, с переключением при FloodWait |
 | `--account 1` / `--account 2` | Только первое или второе приложение |
 | `--days 14` | Глубина постов |
+| `--full-history username` | Все посты канала, без окна `--days` |
 | `--login` | Только авторизация, без сбора |
 
 Экспорт:
@@ -128,7 +130,10 @@ GUI: http://localhost:8501
 ```bash
 python rank_export.py
 python rank_export.py --json TGSpyder_Output/rank/latest.json
+python rank_export.py --json-admin TGSpyder_Output/rank/private.json
 ```
+
+Публичный JSON можно класть в GitHub Pages. Закрытый — только в приватный репозиторий: исходники открытого сайта его не содержат, страница `/tganalyst/admin/` забирает файл через GitHub API после входа.
 
 ---
 

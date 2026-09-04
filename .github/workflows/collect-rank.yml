@@ -53,29 +53,11 @@ jobs:
             printf '%s' "$TELEGRAM_SESSION_2_B64" | base64 -d > analyser_session_2.session
           fi
 
-      - name: Restore previous sqlite
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p data
-          RUN_ID=$(gh run list --workflow "Collect rank snapshot" --status success --limit 1 --json databaseId --jq '.[0].databaseId' || true)
-          if [ -n "$RUN_ID" ]; then
-            gh run download "$RUN_ID" --name rank-sqlite --dir data || true
-          fi
-
       - name: Collect watchlist
         run: python collect_rank.py --only-panel --delay 1.2
 
       - name: Export
         run: python rank_export.py
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: rank-sqlite
-          path: data/rank.sqlite
-          if-no-files-found: ignore
-          retention-days: 90
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,6 +63,9 @@ CREATE TABLE IF NOT EXISTS post_views (
     react_pos    INTEGER,
     react_neu    INTEGER,
     react_neg    INTEGER,
+    body         TEXT,
+    links        TEXT,
+    fwd_from     TEXT,
     PRIMARY KEY (snapshot_id, channel_id, msg_id),
     FOREIGN KEY (snapshot_id) REFERENCES snapshots(id),
     FOREIGN KEY (channel_id) REFERENCES channels(id)
@@ -119,7 +123,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for name in ('react_pos', 'react_neu', 'react_neg'):
         if name not in cols:
             conn.execute(f'ALTER TABLE post_views ADD COLUMN {name} INTEGER')
+    for name in ('body', 'links', 'fwd_from'):
+        if name not in cols:
+            conn.execute(f'ALTER TABLE post_views ADD COLUMN {name} TEXT')
     conn.commit()
+
+
+def _links_cell(value) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
 
 
 def utc_now() -> str:
@@ -236,8 +251,8 @@ def replace_channel_snapshot(
         """
         INSERT INTO post_views (
             snapshot_id, channel_id, msg_id, posted_at, views, forwards,
-            reactions, react_pos, react_neu, react_neg
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            reactions, react_pos, react_neu, react_neg, body, links, fwd_from
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -251,6 +266,9 @@ def replace_channel_snapshot(
                 p.get('react_pos'),
                 p.get('react_neu'),
                 p.get('react_neg'),
+                p.get('body'),
+                _links_cell(p.get('links')),
+                p.get('fwd_from'),
             )
             for p in posts
         ],
