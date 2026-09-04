@@ -334,7 +334,9 @@ def _post_admin(p: dict) -> dict:
 def _snapshot_payload(conn, snapshot_id: int, *, private: bool) -> dict:
     meta = snapshot_meta(conn, snapshot_id)
     rows = catalog_rows(conn, snapshot_id)
-    watch = {c['username'].lower() for c in load_catalog()}
+    catalog = load_catalog()
+    watch = {c['username'].lower() for c in catalog}
+    me_set = {c['username'].lower() for c in catalog if c.get('me')}
     rows = [r for r in rows if r['username'].lower() in watch]
     prev_id = previous_snapshot_id(conn, snapshot_id)
     prev_map = {}
@@ -381,13 +383,25 @@ def _snapshot_payload(conn, snapshot_id: int, *, private: bool) -> dict:
         }
         if private:
             channel['about'] = row.get('about') or ''
+            channel['me'] = row['username'].lower() in me_set
         channels.append(channel)
-    return {
+    payload = {
         'collected_at': meta.get('collected_at'),
         'snapshot_id': meta.get('id'),
         'heatmap': _heatmap(combined_times),
         'channels': channels,
     }
+    if private:
+        payload['catalog'] = [
+            {
+                'username': c['username'],
+                'topic': c.get('topic') or '',
+                'panel': bool(c.get('panel')),
+                'me': bool(c.get('me')),
+            }
+            for c in catalog
+        ]
+    return payload
 
 
 def public_payload(conn, snapshot_id: int) -> dict:

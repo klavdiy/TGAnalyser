@@ -93,11 +93,15 @@ def load_catalog(path: Path = DEFAULT_CATALOG) -> list[dict]:
             if current:
                 channels.append(current)
             username = raw.split(':', 1)[1].strip().lstrip('@')
-            current = {'username': username, 'topic': '', 'panel': False}
+            current = {'username': username, 'topic': '', 'panel': False, 'me': False}
         elif current is not None and raw.startswith('topic:'):
             current['topic'] = raw.split(':', 1)[1].strip()
         elif current is not None and raw.startswith('panel:'):
             current['panel'] = raw.split(':', 1)[1].strip().lower() in (
+                'true', 'yes', '1',
+            )
+        elif current is not None and raw.startswith('me:'):
+            current['me'] = raw.split(':', 1)[1].strip().lower() in (
                 'true', 'yes', '1',
             )
     if current:

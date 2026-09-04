@@ -1,8 +1,10 @@
 # Watchlist. panel: true — include in scheduled snapshots.
+# me: true — свой канал, полная история, якорь стола.
 channels:
 - username: cyberpoleshuk
   topic: Сообщество ИБ
   panel: true
+  me: true
 - username: cybersecdugin
   topic: Сообщество ИБ
   panel: true

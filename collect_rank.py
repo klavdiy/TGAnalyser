@@ -314,6 +314,9 @@ async def run(args: argparse.Namespace) -> None:
     pending = [c for c in catalog if c['username'].lower() not in done]
     log.info('К сбору: %s из %s', len(pending), len(catalog))
     full_history = {u.lower().lstrip('@') for u in args.full_history}
+    full_history |= {
+        c['username'].lower() for c in load_catalog(Path(args.catalog)) if c.get('me')
+    }
 
     try:
         default_cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)

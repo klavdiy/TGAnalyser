@@ -78,13 +78,15 @@ channels:
 - username: example_channel
   topic: Сообщество ИБ
   panel: true
+  me: true
 ```
 
 - `username` — без `@`
 - `topic` — подпись тематики в таблице
 - `panel: true` — канал попадает в снимок `--only-panel`
+- `me: true` — свой канал: полная история при сборе, якорь закрытого стола
 
-В репозитории лежит готовый watchlist. Замените его своим.
+Живой список каналов хранится в приватном репозитории снимка. Файл в этом репозитории — запасной seed.
 
 ---
 
@@ -133,7 +135,7 @@ python rank_export.py --json TGSpyder_Output/rank/latest.json
 python rank_export.py --json-admin TGSpyder_Output/rank/private.json
 ```
 
-Публичный JSON можно класть в GitHub Pages. Закрытый — только в приватный репозиторий: исходники открытого сайта его не содержат, страница `/tganalyst/admin/` забирает файл через GitHub API после входа.
+Публичный JSON — только метрики. Закрытый (тексты, ссылки, about) — только в приватный репозиторий. Стол [klavdiy.github.io/tganalyst](https://klavdiy.github.io/tganalyst/) закрыт логином GitHub и снимок на Pages не кладёт.
 
 ---
 
