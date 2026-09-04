@@ -46,6 +46,7 @@ def channel_posts(
     rows = conn.execute(
         """
         SELECT pv.msg_id, pv.posted_at, pv.views, pv.forwards, pv.reactions,
+               pv.react_pos, pv.react_neu, pv.react_neg,
                c.username
         FROM post_views pv
         JOIN channels c ON c.id = pv.channel_id

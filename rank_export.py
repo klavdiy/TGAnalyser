@@ -271,7 +271,10 @@ def public_payload(conn, snapshot_id: int) -> dict:
                     'posted_at': p['posted_at'],
                     'views': p['views'],
                     'forwards': p['forwards'],
-                    'reactions': p['reactions'],
+                    'reactions': p.get('reactions'),
+                    'react_pos': p.get('react_pos'),
+                    'react_neu': p.get('react_neu'),
+                    'react_neg': p.get('react_neg'),
                 }
                 for p in posts
             ],

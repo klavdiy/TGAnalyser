@@ -62,12 +62,30 @@ def extract_rkn_url(*texts: str | None) -> str:
     return ''
 
 
-def count_reactions(msg) -> int:
-    total = 0
-    if msg.reactions:
-        for result in msg.reactions.results:
-            total += result.count
-    return total
+POS_EMOJI = frozenset(
+    '👍❤♥😍🥰🤩🎉👏🔥💯⭐✨💪🤝👌🙏😁😂🤣😊💙💚💛💜🧡🖤🤍🤎⚡🏆🫡'
+)
+NEG_EMOJI = frozenset('👎💩😡🤬😢😭🤮🤡💔😤😠😒🙄')
+
+
+def _norm_emo(text: str) -> str:
+    return (text or '').replace('\ufe0f', '').replace('\u200d', '')
+
+
+def grade_reactions(msg) -> tuple[int, int, int, int]:
+    pos = neu = neg = 0
+    if not msg.reactions:
+        return 0, 0, 0, 0
+    for result in msg.reactions.results:
+        n = int(result.count or 0)
+        emo = _norm_emo(getattr(result.reaction, 'emoticon', None) or '')
+        if emo and any(ch in POS_EMOJI for ch in emo):
+            pos += n
+        elif emo and any(ch in NEG_EMOJI for ch in emo):
+            neg += n
+        else:
+            neu += n
+    return pos + neu + neg, pos, neu, neg
 
 
 def iso(dt: datetime | None) -> str | None:
@@ -194,12 +212,16 @@ async def collect_channel(pool: AccountPool, username: str, cutoff: datetime) ->
             break
         if not msg.post and msg.views is None and not (msg.text or msg.media):
             continue
+        total, pos, neu, neg = grade_reactions(msg)
         posts.append({
             'msg_id': msg.id,
             'posted_at': iso(msg_date),
             'views': msg.views,
             'forwards': msg.forwards or 0,
-            'reactions': count_reactions(msg),
+            'reactions': total,
+            'react_pos': pos,
+            'react_neu': neu,
+            'react_neg': neg,
         })
 
     stats['posts_sampled'] = len(posts)

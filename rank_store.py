@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS post_views (
     views        INTEGER,
     forwards     INTEGER,
     reactions    INTEGER,
+    react_pos    INTEGER,
+    react_neu    INTEGER,
+    react_neg    INTEGER,
     PRIMARY KEY (snapshot_id, channel_id, msg_id),
     FOREIGN KEY (snapshot_id) REFERENCES snapshots(id),
     FOREIGN KEY (channel_id) REFERENCES channels(id)
@@ -107,7 +110,16 @@ def connect(db_path: Path = DEFAULT_DB) -> sqlite3.Connection:
     conn.execute('PRAGMA foreign_keys = ON')
     conn.execute('PRAGMA journal_mode = WAL')
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    cols = {row[1] for row in conn.execute('PRAGMA table_info(post_views)')}
+    for name in ('react_pos', 'react_neu', 'react_neg'):
+        if name not in cols:
+            conn.execute(f'ALTER TABLE post_views ADD COLUMN {name} INTEGER')
+    conn.commit()
 
 
 def utc_now() -> str:
@@ -223,8 +235,9 @@ def replace_channel_snapshot(
     conn.executemany(
         """
         INSERT INTO post_views (
-            snapshot_id, channel_id, msg_id, posted_at, views, forwards, reactions
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            snapshot_id, channel_id, msg_id, posted_at, views, forwards,
+            reactions, react_pos, react_neu, react_neg
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
             (
@@ -235,6 +248,9 @@ def replace_channel_snapshot(
                 p.get('views'),
                 p.get('forwards'),
                 p.get('reactions'),
+                p.get('react_pos'),
+                p.get('react_neu'),
+                p.get('react_neg'),
             )
             for p in posts
         ],

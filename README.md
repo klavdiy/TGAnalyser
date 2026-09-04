@@ -167,7 +167,7 @@ python rank_export.py --json TGSpyder_Output/rank/latest.json
 
 ## Автоматизация
 
-В репозитории есть workflow `.github/workflows/collect-rank.yml` (ручной запуск). Для продакшена снимок раз в 12 часов крутится на сайте [klavdiy.github.io/site/tganalyst](https://klavdiy.github.io/site/tganalyst/): Actions забирает этот репозиторий как код сборщика, без копирования скриптов.
+В репозитории есть workflow `.github/workflows/collect-rank.yml` (ручной запуск). Для продакшена снимок раз в 12 часов крутится на сайте [klavdiy.github.io/tganalyst](https://klavdiy.github.io/tganalyst/): Actions забирает этот репозиторий как код сборщика, без копирования скриптов.
 
 Секреты GitHub Actions (если запускаете сбор сами):
 
