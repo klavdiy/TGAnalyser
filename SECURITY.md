@@ -1,21 +1,20 @@
 # Security Policy
 
-## Supported Versions
+## Reporting
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+If you find a vulnerability, use GitHub **Report a vulnerability** on this repository. Do not open a public issue.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Credentials
 
-## Reporting a Vulnerability
+Never commit:
 
-Use this section to tell people how to report a vulnerability.
+- `.env`
+- Telegram session files (`*.session`)
+- cloud passwords
+- API id / API hash values
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Copy `.env.example` to `.env` and keep `.env` only on your machine or in encrypted GitHub Actions secrets.
+
+## Supported versions
+
+The `main` branch is the only supported line.

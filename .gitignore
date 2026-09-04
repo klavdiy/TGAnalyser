@@ -1,4 +1,5 @@
 venv/
+.venv/
 __pycache__/
 *.py[cod]
 *.session
@@ -6,3 +7,19 @@ __pycache__/
 TGSpyder_Output/
 .DS_Store
 .env
+.env.*
+!.env.example
+password.txt
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
+
+# Local-only channel dumps, not part of the ranking product
+parser.py
+analyze_mvd.py
+collect_mvd.py
+collect_multi.py
+export_analysis.py
+plot_correlation.py
+plot_whiteboard.py

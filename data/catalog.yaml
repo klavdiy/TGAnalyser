@@ -1,0 +1,23 @@
+# Watchlist. panel: true — include in scheduled snapshots.
+channels:
+- username: cyberpoleshuk
+  topic: Сообщество ИБ
+  panel: true
+- username: cybersecdugin
+  topic: Сообщество ИБ
+  panel: true
+- username: soldatov_in_telegram
+  topic: Сообщество ИБ
+  panel: true
+- username: alukatsky
+  topic: Новости ИБ
+  panel: true
+- username: cyberpoolofsharks
+  topic: Сообщество ИБ
+  panel: true
+- username: safebdv
+  topic: Сообщество ИБ
+  panel: true
+- username: alexredsec
+  topic: Карьера и обучение
+  panel: true
